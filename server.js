@@ -11,7 +11,7 @@ const TARGET_IP = 'http://213.74.17.67';
 
 // ⚠️ GİŞE MASTER KULLANICI ADI VE ŞİFRESİNİ BURAYA YAZ ⚠️
 const OPIS_USER = "admin";    // Kendi gişe kullanıcı adınızı yazın
-const OPIS_PASS = "123456";   // Kendi gişe şifrenizi yazın
+const OPIS_PASS = "ak10tur";   // Kendi gişe şifrenizi yazın
 
 // 1. Port Ayarlama ve Yönlendirme
 app.get('/set-port/:port', (req, res) => {
