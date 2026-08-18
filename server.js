@@ -11,7 +11,7 @@ const TARGET_IP = 'http://213.74.17.67';
 
 // ⚠️ GİŞE MASTER KULLANICI ADI VE ŞİFRESİNİ BURAYA YAZ ⚠️
 const OPIS_USER = "admin";    // Kendi gişe kullanıcı adınızı yazın
-const OPIS_PASS = "ak10tur";   // Kendi gişe şifrenizi yazın
+const OPIS_PASS = "123456";   // Kendi gişe şifrenizi yazın
 
 // 1. Port Ayarlama ve Yönlendirme
 app.get('/set-port/:port', (req, res) => {
@@ -33,16 +33,15 @@ app.use('/', createProxyMiddleware({
         return `${TARGET_IP}:${port}`;
     },
     changeOrigin: true,
-    autoRewrite: true, // OPIS'in kendi içindeki yönlendirmelerini düzeltir
+    autoRewrite: true, 
     protocolRewrite: 'https',
     selfHandleResponse: true,
     onProxyReq: (proxyReq, req, res) => {
-        proxyReq.setHeader('accept-encoding', 'identity');
+        proxyReq.setHeader('accept-encoding', 'identity'); // Sıkıştırmayı zorla kapat
     },
     onProxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
         
-        // --- SİHİRLİ DOKUNUŞ: ÇEREZ KORUMASI ---
-        // OPIS'ten gelen oturum çerezlerini alıp Iframe içinde silinmemesi için mühürlüyoruz
+        // --- ÇEREZ (OTURUM) KORUMASI ---
         let cookies = proxyRes.headers['set-cookie'];
         if (cookies) {
             let fixedCookies = cookies.map(cookie => {
@@ -61,35 +60,50 @@ app.use('/', createProxyMiddleware({
         const contentType = proxyRes.headers['content-type'];
         
         // --- OTOMATİK GİRİŞ KODU ---
-        if (contentType && contentType.includes('text/html')) {
+        if (contentType && contentType.toLowerCase().includes('text/html')) {
             let html = responseBuffer.toString('utf8');
             
-            // Sadece Login sayfasındaysa müdahale et
-            if (html.includes('Kullanıcı Adı') && html.includes('Parola')) {
+            // DÜZELTME: Türkçe karakterler yerine, direkt URL ve OPIS Buton kimliğine bakıyoruz!
+            if (req.url.includes('login.jsf') || html.includes('form:loginButton')) {
                 const autoLoginScript = `
                     <script>
                         document.addEventListener("DOMContentLoaded", function() {
                             setTimeout(function() {
-                                let inputs = document.querySelectorAll('input');
+                                // PrimeFaces sınıflarına sahip veya görünür olan inputları yakala
+                                let textInputs = document.querySelectorAll('input[type="text"]');
+                                let passInputs = document.querySelectorAll('input[type="password"]');
                                 
-                                inputs.forEach(input => {
-                                    if (input.type === 'text' && !input.value) {
-                                        input.value = '${OPIS_USER}';
+                                let uInput = null;
+                                for(let i=0; i<textInputs.length; i++) {
+                                    if(textInputs[i].className && textInputs[i].className.includes('ui-inputfield')) {
+                                        uInput = textInputs[i]; break;
                                     }
-                                    if (input.type === 'password' && !input.value) {
-                                        input.value = '${OPIS_PASS}';
-                                    }
-                                });
-                                
-                                let loginBtn = document.getElementById('form:loginButton');
-                                if (loginBtn) {
-                                    loginBtn.click();
                                 }
+                                if(!uInput && textInputs.length > 0) uInput = textInputs[0];
+                                
+                                let pInput = passInputs.length > 0 ? passInputs[0] : null;
+                                
+                                if (uInput) uInput.value = '${OPIS_USER}';
+                                if (pInput) pInput.value = '${OPIS_PASS}';
+                                
+                                // Şifreler yazıldıktan kısa bir süre sonra butona tıkla
+                                setTimeout(function() {
+                                    let loginBtn = document.getElementById('form:loginButton');
+                                    if (loginBtn) {
+                                        loginBtn.click();
+                                    }
+                                }, 300);
                             }, 500);
                         });
                     </script>
                 `;
-                html = html.replace('</body>', autoLoginScript + '</body>');
+                
+                // Büyük/küçük harf duyarsız </body> etiketini bul ve script'i önüne ekle
+                if (html.match(/<\/body>/i)) {
+                    html = html.replace(/<\/body>/i, autoLoginScript + '</body>');
+                } else {
+                    html += autoLoginScript;
+                }
             }
             return html;
         }
