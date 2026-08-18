@@ -13,7 +13,7 @@ const TARGET_IP = 'http://213.74.17.67';
 const OPIS_USER = "admin";    // Kendi gişe kullanıcı adınızı yazın
 const OPIS_PASS = "ak10tur";   // Kendi gişe şifrenizi yazın
 
-// 1. Port Ayarlama ve Yönlendirme (Uygulamadan buraya gelinecek)
+// 1. Port Ayarlama ve Yönlendirme
 app.get('/set-port/:port', (req, res) => {
     const port = req.params.port;
     res.cookie('target_port', port, { 
@@ -22,13 +22,12 @@ app.get('/set-port/:port', (req, res) => {
         secure: true, 
         sameSite: 'none' 
     });
-    // Port hafızaya alındıktan sonra OPIS giriş sayfasına yönlendir
     res.redirect('/opis200/login.jsf');
 });
 
 // 2. Köprü (Proxy) ve Otomatik Şifre Doldurma Sistemi
 app.use('/', createProxyMiddleware({
-    target: TARGET_IP + ':8891', // Yedek başlangıç
+    target: TARGET_IP + ':8891',
     router: function(req) {
         const port = req.cookies.target_port || '8891';
         return `${TARGET_IP}:${port}`;
@@ -36,50 +35,40 @@ app.use('/', createProxyMiddleware({
     changeOrigin: true,
     selfHandleResponse: true,
     onProxyReq: (proxyReq, req, res) => {
-        // HTML koduna müdahale edebilmek için sıkıştırmayı kapatıyoruz
         proxyReq.setHeader('accept-encoding', 'identity');
     },
     onProxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
         const contentType = proxyRes.headers['content-type'];
         
-        // Sadece HTML dönüyorsa içine sihirli kodumuzu enjekte ediyoruz
         if (contentType && contentType.includes('text/html')) {
             let html = responseBuffer.toString('utf8');
             
-            // Eğer giriş sayfasındaysak otomatik doldurma scriptini ekle
             if (html.includes('Kullanıcı Adı') || html.includes('Parola')) {
                 const autoLoginScript = `
                     <script>
                         document.addEventListener("DOMContentLoaded", function() {
                             setTimeout(function() {
                                 let inputs = document.querySelectorAll('input');
-                                let uFilled = false, pFilled = false;
                                 
-                                // Kutuları bul ve şifreleri yaz
+                                // Şifreleri doldur
                                 inputs.forEach(input => {
                                     if (input.type === 'text' && !input.value) {
                                         input.value = '${OPIS_USER}';
-                                        uFilled = true;
                                     }
                                     if (input.type === 'password' && !input.value) {
                                         input.value = '${OPIS_PASS}';
-                                        pFilled = true;
                                     }
                                 });
                                 
-                                // Her şey yazıldıysa Giriş butonuna otomatik tıkla
-                                if (uFilled && pFilled) {
-                                    inputs.forEach(input => {
-                                        if (input.type === 'submit' || input.value.includes('Giriş')) {
-                                            input.click();
-                                        }
-                                    });
+                                // DevTools'ta tespit ettiğimiz PrimeFaces Giriş butonuna tıkla
+                                let loginBtn = document.getElementById('form:loginButton');
+                                if (loginBtn) {
+                                    loginBtn.click();
                                 }
-                            }, 400); // Yarım saniyeden kısa sürede şifreyi girer ve tıklar
+                            }, 500); // PrimeFaces'in tam yüklenmesi için yarım saniye bekler
                         });
                     </script>
                 `;
-                // Kodu sayfanın en altına yapıştır
                 html = html.replace('</body>', autoLoginScript + '</body>');
             }
             return html;
